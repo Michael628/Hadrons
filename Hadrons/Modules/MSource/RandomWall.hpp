@@ -82,7 +82,7 @@ private:
     std::string tName_;
 };
 
-MODULE_REGISTER_TMP(RandomWall, TRandomWall<FIMPL>, MSource);
+// MODULE_REGISTER_TMP(RandomWall, TRandomWall<FIMPL>, MSource);
 MODULE_REGISTER_TMP(StagRandomWall, TRandomWall<STAGIMPL>, MSource);
 
 /******************************************************************************
@@ -146,9 +146,9 @@ void TRandomWall<FImpl>::execute(void)
     {
         gaussian(rng4d(), eta1);
         gaussian(rng4d(), eta2);
-        eta1 = eta1*timesI(eta2);
+        eta1 += timesI(eta2);
         eta1 = where((t == par().tW), eta1, 0.*eta1);
-        pokeColour(src, eta1, c);
+        pokeColour(src, eta1, c,c);
     }
 }
 
