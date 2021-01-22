@@ -116,7 +116,7 @@ std::vector<std::string> TRandomWall<FImpl>::getOutput(void)
 template <typename FImpl>
 void TRandomWall<FImpl>::setup(void)
 {
-    envCreateLat(PropagatorField, getName());
+    envCreateLat(FermionField, getName());
     envCache(Lattice<iScalar<vInteger>>, tName_,    1, envGetGrid(LatticeComplex));
     envTmpLat(LatticeComplex, "eta");
 }
@@ -125,11 +125,11 @@ void TRandomWall<FImpl>::setup(void)
 template <typename FImpl>
 void TRandomWall<FImpl>::execute(void)
 {    
-    LOG(Message) << "Generating a random wall source at t = " << par().tW 
+    LOG(Message) << "Generating random wall source at t = " << par().tW 
                  << std::endl;
     
     auto  &t   = envGet(Lattice<iScalar<vInteger>>, tName_);
-    auto  &src = envGet(PropagatorField, getName());
+    auto  &src = envGet(FermionField, getName());
     auto  nc   = FImpl::Dimension;
     
     if (!hasT_)
@@ -145,7 +145,7 @@ void TRandomWall<FImpl>::execute(void)
         gaussian(rng4d(), eta);
         eta = where((t == par().tW), eta/(sqrt(pow(real(eta),2)+pow(imag(eta),2))), 0.*eta);
 
-        pokeColour(src, eta, c, c);
+        pokeColour(src, eta, c);
     }
 }
 
