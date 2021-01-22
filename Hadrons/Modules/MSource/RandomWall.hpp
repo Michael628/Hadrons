@@ -117,20 +117,19 @@ template <typename FImpl>
 void TRandomWall<FImpl>::setup(void)
 {
     envCreateLat(PropagatorField, getName());
-    envCache(Lattice<iScalar<vInteger>>, tName_, 1, envGetGrid(LatticeComplex));
-    envTmpLat(LatticeComplex, "eta1");
-    envTmpLat(LatticeComplex, "eta2");
+    envCache(Lattice<iScalar<vInteger>>, tName_,    1, envGetGrid(LatticeComplex));
+    envTmpLat(LatticeComplex, "eta");
 }
 
 // execution ///////////////////////////////////////////////////////////////////
 template <typename FImpl>
 void TRandomWall<FImpl>::execute(void)
 {    
-    LOG(Message) << "Generating random wall source at t = " << par().tW 
+    LOG(Message) << "Generating a random wall source at t = " << par().tW 
                  << std::endl;
     
-    auto  &src = envGet(PropagatorField, getName());
     auto  &t   = envGet(Lattice<iScalar<vInteger>>, tName_);
+    auto  &src = envGet(PropagatorField, getName());
     auto  nc   = FImpl::Dimension;
     
     if (!hasT_)
@@ -139,16 +138,14 @@ void TRandomWall<FImpl>::execute(void)
         hasT_ = true;
     }
 
-    envGetTmp(LatticeComplex, eta1);
-    envGetTmp(LatticeComplex, eta2);
-    src = Zero();
+    envGetTmp(LatticeComplex, eta);
+
     for (unsigned int c = 0; c < nc; ++c)
     {
-        gaussian(rng4d(), eta1);
-        gaussian(rng4d(), eta2);
-        eta1 += timesI(eta2);
-        eta1 = where((t == par().tW), eta1, 0.*eta1);
-        pokeColour(src, eta1, c,c);
+        gaussian(rng4d(), eta);
+        eta = where((t == par().tW), eta/(sqrt(pow(real(eta),2)+pow(imag(eta),2))), 0.*eta);
+
+        pokeColour(src, eta, c, c);
     }
 }
 
