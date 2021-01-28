@@ -203,7 +203,7 @@ std::vector<std::string> TMeson<FImpl1, FImpl2>::getOutputFiles(void)
     return output;
 }
 
-// setup ///////////////////////////////////////////////////////////////////////
+// execution ///////////////////////////////////////////////////////////////////
 template <typename FImpl1, typename FImpl2>
 void TMeson<FImpl1, FImpl2>::setup(void)
 {
@@ -405,14 +405,9 @@ void TStagMeson<FImpl1, FImpl2>::execute(void)
     << " quarks '" << par().q1 << "' and '" << par().q2 << "'"
     << std::endl;
     
-    LatticeBase* q1;
-    LatticeBase* q2;
-
     std::vector<TComplex>  buf;
     std::vector<Result>    result;
     int                    nt = env().getDim(Tp);
-    bool is_propagator;
-
     // staggered gammas
     envGetTmp(std::vector<LatticeComplex>,stag_phase_sink);
     
@@ -423,93 +418,42 @@ void TStagMeson<FImpl1, FImpl2>::execute(void)
         result[i].gamma_src = gammaList[i];
         result[i].corr.resize(nt);
     }
-
-    if (envHasType(PropagatorField1, par().q1) and
-        envHasType(PropagatorField2, par().q2))
+    if (envHasType(SlicedPropagator1, par().q1) and
+        envHasType(SlicedPropagator2, par().q2))
     {
-        q1 = &(envGet(PropagatorField1, par().q1));
-        q2 = &(envGet(PropagatorField2, par().q2));
-        is_propagator = true;
+        LOG(Message) << "(sliced staggered propagator not implemented)" << std::endl;
+        assert(0);
     }
-    else if (envHasType(FermionField1, par().q1) and
-        envHasType(FermionField2, par().q2))
+    else
     {
-        q1 = &(envGet(FermionField1, par().q1));
-        q2 = &(envGet(FermionField2, par().q2));
-        is_propagator = false;
-    } 
-    else {
-        HADRONS_ERROR(Argument, "incompatible field types '" 
-            + env().getObjectType(par().q1) + "', and '" + env().getObjectType(par().q2)+ "'.")        
-    }
-
-    envGetTmp(LatticeComplex, c);
-    //envGetTmp(LatticeComplex, phase);
-    
-    //LOG(Message) << "(source position '" << location << "')" << std::endl;
-    
-    LOG(Message) << "(using sink '" << par().sink << "')" << std::endl;
-    
-    for (unsigned int i = 0; i < result.size(); ++i)
-    {
-        std::string ns;
+        auto &q1 = envGet(PropagatorField1, par().q1);
+        auto &q2 = envGet(PropagatorField2, par().q2);
         
-        ns = vm().getModuleNamespace(env().getObjectModule(par().sink));
-        if (ns == "MSource")
+        envGetTmp(LatticeComplex, c);
+        //envGetTmp(LatticeComplex, phase);
+        
+        //LOG(Message) << "(source position '" << location << "')" << std::endl;
+        
+        LOG(Message) << "(using sink '" << par().sink << "')" << std::endl;
+        for (unsigned int i = 0; i < result.size(); ++i)
         {
-            PropagatorField1 &sink = envGet(PropagatorField1, par().sink);
-            if(is_propagator) {
-                c = trace(StagMesonConnected(*(PropagatorField1*)q1, *(PropagatorField2*)q2, stag_phase_sink[i], stag_phase_source[i]));
+            std::string ns;
+            
+            ns = vm().getModuleNamespace(env().getObjectModule(par().sink));
+            if (ns == "MSource")
+            {
+                PropagatorField1 &sink = envGet(PropagatorField1, par().sink);
+                c = trace(StagMesonConnected(q1, q2, stag_phase_sink[i], stag_phase_source[i]));
                 sliceSum(c, buf, Tp);
-
-                for (unsigned int t = 0; t < buf.size(); ++t) {
-                    result[i].corr[t] = TensorRemove(buf[t]);
-                }
-            } else {
-                std::vector<Complex>  cbuf;
-
-                FermionField1 f1 = *(FermionField1*)q1;
-                FermionField2 f2 = *(FermionField2*)q2;
-
-                f1 = f1*(stag_phase_sink[i]*stag_phase_source[i]);
-
-                sliceInnerProductVector<typename FermionField1::vector_object>(cbuf,f1,f2,Tp);
-
-                for (unsigned int t = 0; t < cbuf.size(); ++t) {
-                    result[i].corr[t] = cbuf[t];
-                }
             }
-        }
-        else if (ns == "MSink")
-        {
-            SinkFnScalar &sink = envGet(SinkFnScalar, par().sink);
-
-            if(is_propagator) {
-                c = trace(StagMesonConnected(*(PropagatorField1*)q1, *(PropagatorField2*)q2, stag_phase_sink[i], stag_phase_source[i]));
-            } else {
-                FermionField1 f1 = *(FermionField1*)q1;
-                FermionField2 f2 = *(FermionField2*)q2;
-
-                f1 = f1*(stag_phase_sink[i]*stag_phase_source[i]);
-
-                conformable(f1,f2);
-
-                GridBase *grid = f1.Grid();
-
-                const uint64_t nsimd = grid->Nsimd();
-                const uint64_t sites = grid->oSites();
-
-                autoView( f1_v, f1, AcceleratorRead);
-                autoView( f2_v, f2, AcceleratorRead);
-                autoView( c_v, c, AcceleratorWrite);
-
-                accelerator_for( ss, sites, 1,{
-                  c_v[ss]=innerProductD(f2_v[ss],f1_v[ss]);
-                });
+            else if (ns == "MSink")
+            {
+                SinkFnScalar &sink = envGet(SinkFnScalar, par().sink);
+                c   = trace(StagMesonConnected(q1, q2, stag_phase_sink[i], stag_phase_source[i]));
+                buf = sink(c);
             }
-            buf = sink(c);
-
-            for (unsigned int t = 0; t < buf.size(); ++t) {
+            for (unsigned int t = 0; t < buf.size(); ++t)
+            {
                 result[i].corr[t] = TensorRemove(buf[t]);
             }
         }

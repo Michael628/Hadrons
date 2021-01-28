@@ -56,7 +56,8 @@ class RandomWallPar: Serializable
 {
 public:
     GRID_SERIALIZABLE_CLASS_MEMBERS(RandomWallPar,
-                                    unsigned int, tW);
+                                    unsigned int, tW,
+                                    unsigned int, size);
 };
 
 template <typename FImpl>
@@ -116,7 +117,11 @@ std::vector<std::string> TRandomWall<FImpl>::getOutput(void)
 template <typename FImpl>
 void TRandomWall<FImpl>::setup(void)
 {
-    envCreateLat(FermionField, getName());
+    if (par().size && par().size > 1) {
+        envCreate(std::vector<FermionField>, getName(), 1, par().size, envGetGrid(FermionField));
+    } else {
+        envCreate(std::vector<FermionField>, getName(), 1, 1, envGetGrid(FermionField));
+    }
     envCache(Lattice<iScalar<vInteger>>, tName_,    1, envGetGrid(LatticeComplex));
 }
 
@@ -133,7 +138,7 @@ void TRandomWall<FImpl>::execute(void)
     
     auto  &t   = envGet(Lattice<iScalar<vInteger>>, tName_);
     auto  nc   = FImpl::Dimension;
-    auto  &src = envGet(FermionField, getName());
+    auto  &vec = envGet(std::vector<FermionField>, getName());
     
     if (!hasT_)
     {
@@ -144,52 +149,56 @@ void TRandomWall<FImpl>::execute(void)
     auto &rng      = rng4d();
     GridBase *grid = rng.Grid();
 
-    int multiplicity = RNGfillable_general(grid, src.Grid()); // src has finer or same grid
+    int multiplicity = RNGfillable_general(grid, vec[0].Grid()); // src has finer or same grid
     int Nsimd        = grid->Nsimd();  // guaranteed to be the same for src.Grid() too
     int osites       = grid->oSites();  // guaranteed to be <= src.Grid()->oSites() by a factor multiplicity
     int words        = sizeof(scalar_object) / sizeof(scalar_type);
 
     const Integer tW(par().tW);
 
-    autoView(src_v, src, CpuWrite);
     autoView(t_v  , t, CpuRead);
 
-    thread_for( ss, osites, {
+    for (auto& src: vec) {
 
-        ExtractBuffer<scalar_object> buf(Nsimd);
-        ExtractBuffer<Integer> tbuf(Nsimd);
+        autoView(src_v, src, CpuWrite);
 
-        for (int m = 0; m < multiplicity; m++) {  // Draw from same generator multiplicity times
+        thread_for( ss, osites, {
 
-            int sm = multiplicity * ss + m;  // Maps the generator site to the fine site
+            ExtractBuffer<scalar_object> buf(Nsimd);
+            ExtractBuffer<Integer> tbuf(Nsimd);
 
-            extract(t_v[sm],tbuf);
+            for (int m = 0; m < multiplicity; m++) {  // Draw from same generator multiplicity times
 
-            for (int si = 0; si < Nsimd; si++) {
+                int sm = multiplicity * ss + m;  // Maps the generator site to the fine site
 
-                scalar_type *pointer = (scalar_type *)&buf[si];
+                extract(t_v[sm],tbuf);
 
-                if (tbuf[si] == tW) {
-                    int gdx = rng.generator_idx(ss, si);  // index of generator state
-                    rng._gaussian[gdx].reset();
-                    for (int idx = 0; idx < words; idx++) {
+                for (int si = 0; si < Nsimd; si++) {
 
-                        fillScalar(pointer[idx], rng._gaussian[gdx], rng._generators[gdx]);
+                    scalar_type *pointer = (scalar_type *)&buf[si];
 
-                        // Normalize complex number
-                        Complex c = pointer[idx];
-                        pointer[idx] = c/sqrt(c*adj(c));
+                    if (tbuf[si] == tW) {
+                        int gdx = rng.generator_idx(ss, si);  // index of generator state
+                        rng._gaussian[gdx].reset();
+                        for (int idx = 0; idx < words; idx++) {
+
+                            fillScalar(pointer[idx], rng._gaussian[gdx], rng._generators[gdx]);
+
+                            // Normalize complex number
+                            Complex c = pointer[idx];
+                            pointer[idx] = c/sqrt(c*adj(c));
+                        }
+                    } else {
+                        *pointer = 0.;
+                        // for (int idx = 0; idx < words; idx++) {
+                            // pointer[idx] = 0;
+                        // }
                     }
-                } else {
-                    *pointer = 0.;
-                    // for (int idx = 0; idx < words; idx++) {
-                        // pointer[idx] = 0;
-                    // }
                 }
+                merge(src_v[sm], buf);
             }
-            merge(src_v[sm], buf);
-        }
-    });
+        });
+    }
 }
 
 END_MODULE_NAMESPACE
