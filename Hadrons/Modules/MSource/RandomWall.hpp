@@ -118,19 +118,22 @@ void TRandomWall<FImpl>::setup(void)
 {
     envCreateLat(FermionField, getName());
     envCache(Lattice<iScalar<vInteger>>, tName_,    1, envGetGrid(LatticeComplex));
-    envTmpLat(LatticeComplex, "eta");
 }
 
 // execution ///////////////////////////////////////////////////////////////////
 template <typename FImpl>
 void TRandomWall<FImpl>::execute(void)
 {    
+    typedef typename FermionField::scalar_object scalar_object;
+    typedef typename FermionField::scalar_type scalar_type;
+
+
     LOG(Message) << "Generating random wall source at t = " << par().tW 
                  << std::endl;
     
     auto  &t   = envGet(Lattice<iScalar<vInteger>>, tName_);
-    auto  &src = envGet(FermionField, getName());
     auto  nc   = FImpl::Dimension;
+    auto  &src = envGet(FermionField, getName());
     
     if (!hasT_)
     {
@@ -138,15 +141,55 @@ void TRandomWall<FImpl>::execute(void)
         hasT_ = true;
     }
 
-    envGetTmp(LatticeComplex, eta);
+    auto &rng      = rng4d();
+    GridBase *grid = rng.Grid();
 
-    for (unsigned int c = 0; c < nc; ++c)
-    {
-        gaussian(rng4d(), eta);
-        eta = where((t == par().tW), eta/(sqrt(pow(real(eta),2)+pow(imag(eta),2))), 0.*eta);
+    int multiplicity = RNGfillable_general(grid, src.Grid()); // src has finer or same grid
+    int Nsimd        = grid->Nsimd();  // guaranteed to be the same for src.Grid() too
+    int osites       = grid->oSites();  // guaranteed to be <= src.Grid()->oSites() by a factor multiplicity
+    int words        = sizeof(scalar_object) / sizeof(scalar_type);
 
-        pokeColour(src, eta, c);
-    }
+    const Integer tW(par().tW);
+
+    autoView(src_v, src, CpuWrite);
+    autoView(t_v  , t, CpuRead);
+
+    thread_for( ss, osites, {
+
+        ExtractBuffer<scalar_object> buf(Nsimd);
+        ExtractBuffer<Integer> tbuf(Nsimd);
+
+        for (int m = 0; m < multiplicity; m++) {  // Draw from same generator multiplicity times
+
+            int sm = multiplicity * ss + m;  // Maps the generator site to the fine site
+
+            extract(t_v[sm],tbuf);
+
+            for (int si = 0; si < Nsimd; si++) {
+
+                scalar_type *pointer = (scalar_type *)&buf[si];
+
+                if (tbuf[si] == tW) {
+                    int gdx = rng.generator_idx(ss, si);  // index of generator state
+                    rng._gaussian[gdx].reset();
+                    for (int idx = 0; idx < words; idx++) {
+
+                        fillScalar(pointer[idx], rng._gaussian[gdx], rng._generators[gdx]);
+
+                        // Normalize complex number
+                        Complex c = pointer[idx];
+                        pointer[idx] = c/sqrt(c*adj(c));
+                    }
+                } else {
+                    *pointer = 0.;
+                    // for (int idx = 0; idx < words; idx++) {
+                        // pointer[idx] = 0;
+                    // }
+                }
+            }
+            merge(src_v[sm], buf);
+        }
+    });
 }
 
 END_MODULE_NAMESPACE

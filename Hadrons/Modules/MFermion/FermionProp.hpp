@@ -72,6 +72,7 @@ protected:
     // execution
     virtual void execute(void);
 private:
+    void solvePropagator(FermionField&, FermionField&, const FermionField&);
     unsigned int Ls_;
     Solver       *solver_{nullptr};
 };
@@ -109,37 +110,60 @@ template <typename FImpl>
 void TStagFermionProp<FImpl>::setup(void)
 {
     Ls_ = env().getObjectLs(par().solver);
-    envCreateLat(FermionField, getName());
+    
     envTmpLat(FermionField, "tmp");
     if (Ls_ > 1)
     {
         envTmpLat(FermionField, "src", Ls_);
         envTmpLat(FermionField, "sol", Ls_);
-        envCreateLat(FermionField, getName() + "_5d", Ls_);
     }
     else
     {
         envTmpLat(FermionField, "src");
         envTmpLat(FermionField, "sol");
     }
+    if (envHasType(FermionField, par().source))
+    {
+        envCreateLat(FermionField, getName());
+        if (Ls_ > 1)
+        {
+            envCreateLat(FermionField, getName() + "_5d", Ls_);
+        }
+    }
+    else if (envHasType(std::vector<FermionField>, par().source))
+    {
+        auto &src = envGet(std::vector<FermionField>, par().source);
+
+        envCreate(std::vector<FermionField>, getName(), 1, src.size(),
+                  envGetGrid(FermionField));
+        if (Ls_ > 1)
+        {
+            envCreate(std::vector<FermionField>, getName() + "_5d", Ls_,
+                      src.size(), envGetGrid(FermionField, Ls_));
+        }
+    }
+    else
+    {
+        HADRONS_ERROR_REF(ObjectType, "object '" + par().source 
+                          + "' has an incompatible type ("
+                          + env().getObjectType(par().source)
+                          + ")", env().getObjectAddress(par().source))
+    }
 }
 
 // execution ///////////////////////////////////////////////////////////////////
 template <typename FImpl>
-void TStagFermionProp<FImpl>::execute(void)
+void TStagFermionProp<FImpl>::solvePropagator(FermionField &prop, 
+                                        FermionField &propPhysical,
+                                        const FermionField &source)
 {
-    LOG(Message) << "Computing quark propagator '" << getName() << "'"
-    << std::endl;
-    
-    std::string propName = (Ls_ == 1) ? getName() : (getName() + "_5d");
-    auto        &prop    = envGet(FermionField, propName);
-    auto        &source = envGet(FermionField, par().source);
-    auto        &solver  = envGet(Solver, par().solver);
-    auto        &mat     = solver.getFMat();
+    auto &solver  = envGet(Solver, par().solver);
+    auto &mat     = solver.getFMat();
     
     envGetTmp(FermionField, sol);
     envGetTmp(FermionField, src);
     envGetTmp(FermionField, tmp);
+
     LOG(Message) << "Inverting using solver '" << par().solver
     << "' on source '" << par().source << "'" << std::endl;
 
@@ -172,8 +196,39 @@ void TStagFermionProp<FImpl>::execute(void)
     // create 4D propagators from 5D one if necessary
     if (Ls_ > 1)
     {
-        FermionField &p4d = envGet(FermionField, getName());
-        mat.ExportPhysicalFermionSolution(prop, p4d);
+        mat.ExportPhysicalFermionSolution(prop, propPhysical);
+    }
+}
+
+template <typename FImpl>
+void TStagFermionProp<FImpl>::execute(void)
+{
+    LOG(Message) << "Computing quark propagator '" << getName() << "'"
+    << std::endl;
+    
+    std::string propName = (Ls_ == 1) ? getName() : (getName() + "_5d");
+
+    if (envHasType(FermionField, par().source))
+    {
+        auto &prop         = envGet(FermionField, propName);
+        auto &propPhysical = envGet(FermionField, getName());
+        auto &source       = envGet(FermionField, par().source);
+
+        LOG(Message) << "Using source '" << par().source << "'" << std::endl;
+        solvePropagator(prop, propPhysical, source);
+    }
+    else
+    {
+        auto &prop         = envGet(std::vector<FermionField>, propName);
+        auto &propPhysical = envGet(std::vector<FermionField>, getName());
+        auto &source      = envGet(std::vector<FermionField>, par().source);
+
+        for (unsigned int i = 0; i < source.size(); ++i)
+        {
+            LOG(Message) << "Using element " << i << " of source vector '" 
+                         << par().source << "'" << std::endl;
+            solvePropagator(prop[i], propPhysical[i], source[i]);
+        }
     }
 }
 
