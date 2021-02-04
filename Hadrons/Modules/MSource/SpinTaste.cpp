@@ -31,4 +31,5 @@ using namespace Hadrons;
 using namespace MSource;
 
 template class Grid::Hadrons::MSource::TSpinTaste<STAGIMPL>;
+template class Grid::Hadrons::MSource::TSpinTaste<STAGIMPL,STAGIMPL::FermionField>;
 
