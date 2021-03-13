@@ -3,6 +3,7 @@ AM_CXXFLAGS += -I$(top_srcdir)
  
 EXTRA_PROGRAMS = \
   Test_QED                  \
+  Test_staggered            \
   Test_database             \
   Test_database_concurrency \
   Test_diskvector           \
