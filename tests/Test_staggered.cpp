@@ -81,12 +81,12 @@ int main(int argc, char *argv[])
     actionPar.gauge = "gauge";
     actionPar.mass = 0.1;
     actionPar.c1 = 1.0;
-    actionPar.c2 = 0.0;
+//    actionPar.c2 = 0.0;
     actionPar.tad = 1.0;
     actionPar.boundary = boundary;
     actionPar.twist = twist;
     std::string actionName = "stag";
-    application.createModule<MAction::ImprovedStaggered>(actionName, actionPar);
+    application.createModule<MAction::NaiveStaggered>(actionName, actionPar);
 
     // solvers
     MSolver::RBPrecCG::Par solverPar;
@@ -118,37 +118,6 @@ int main(int argc, char *argv[])
     quarkPar.source = "point_origin";
     application.createModule<MFermion::StagGaugeProp>(quarkName, quarkPar);
 
-    // First sequential propagator (origin) --> (t=1) --> (x,y,z,t)
-    // Sequential source
-    std::string seqSrcName;
-    MSource::SeqGamma::Par seqPar;
-    seqPar.q     = "quark_0t";
-    seqPar.tA    = 1; // source has support on timeslice t=1 only, so tA=tB=1
-    seqPar.tB    = 1; // source has support on timeslice t=1 only, so tA=tB=1
-    seqPar.mom   = "0. 0. 0. 0.";
-    seqPar.gamma = 1; // i.e., Gamma5, see Gamma.h
-    seqSrcName   = "seq_1";
-    application.createModule<MSource::StagSeqGamma>(seqSrcName, seqPar);
-    // Sequential propagator
-    quarkName       = "quark_01t";
-    quarkPar.solver = "cg_stag";
-    quarkPar.source = "seq_1"; 
-    application.createModule<MFermion::StagGaugeProp>(quarkName, quarkPar);
-
-    // Second sequential propagator (origin) --> (t=1) --> (t=2) --> (x,y,z,t)
-    seqPar.q     = "quark_01t";
-    seqPar.tA    = 2; // source has support on timeslice t=2 only, so tA=tB=1
-    seqPar.tB    = 2; // source has support on timeslice t=1 only, so tA=tB=1
-    seqPar.mom   = "0. 0. 0. 0.";
-    seqPar.gamma = 1; // i.e., Gamma5, see Gamma.h
-    seqSrcName   = "seq_2";
-    application.createModule<MSource::StagSeqGamma>(seqSrcName, seqPar);
-    // Sequential propagator
-    quarkName       = "quark_012t";
-    quarkPar.solver = "cg_stag";
-    quarkPar.source = "seq_2"; 
-    application.createModule<MFermion::StagGaugeProp>(quarkName, quarkPar);
-
     // Two-point function
     std::string mesName;
     MContraction::Meson::Par mesPar;
@@ -158,31 +127,11 @@ int main(int argc, char *argv[])
     mesPar.q2     = "quark_0t";
     mesPar.gammas = "Gamma5"; // diagonal
     mesPar.sink   = "sink";
+    mesPar.source = "point_origin";
     mesName       = "2pt_point";
     application.createModule<MContraction::StagMeson>(mesName, mesPar);
 
-    // Three-point function
-    // ML - mesPar.output = "3pt/point_01t";
-    mesPar.output = "point_01t";
-    mesPar.q1     = "quark_0t";
-    mesPar.q2     = "quark_01t";
-    mesPar.gammas = "Gamma5"; // diagonal
-    mesPar.sink   = "sink";
-    mesName       = "3pt_point";
-    application.createModule<MContraction::StagMeson>(mesName, mesPar);
-
-    // Four-point function
-    // ML - mesPar.output = "4pt/point_012t";
-    mesPar.output = "point_012t";
-    mesPar.q1     = "quark_0t";
-    mesPar.q2     = "quark_012t";
-    mesPar.gammas = "Gamma5"; // diagonal
-    mesPar.sink   = "sink";
-    mesName       = "4pt_point";
-    application.createModule<MContraction::StagMeson>(mesName, mesPar);
-
     // execution
-    application.saveParameterFile("test_staggered.xml");
     application.run();
     
     // epilogue
