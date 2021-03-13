@@ -20,6 +20,9 @@ tests-local: $(EXTRA_PROGRAMS)
 Test_QED_SOURCES=Test_QED.cpp
 Test_QED_LDADD=-lHadrons -lGrid
 
+Test_staggered_SOURCES=Test_staggered.cpp
+Test_staggered_LDADD=-lHadrons -lGrid
+
 Test_diskvector_SOURCES=Test_diskvector.cpp
 Test_diskvector_LDADD=-lHadrons -lGrid
 
