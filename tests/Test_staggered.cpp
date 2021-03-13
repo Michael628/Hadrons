@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
     std::string twist = "0. 0. 0. 0.";
 
     // actions
-    MAction::ImprovedStaggered::Par actionPar;
+    MAction::NaiveStaggered::Par actionPar;
     actionPar.gauge = "gauge";
     actionPar.mass = 0.1;
     actionPar.c1 = 1.0;
