@@ -68,7 +68,6 @@ public:
                                     std::string, q2,
                                     std::string, gammas,
                                     std::string, sink,
-                                    std::string, source,
                                     std::string, output);
 };
 
@@ -303,7 +302,7 @@ TStagMeson<FImpl1, FImpl2>::TStagMeson(const std::string name)
 template <typename FImpl1, typename FImpl2>
 std::vector<std::string> TStagMeson<FImpl1, FImpl2>::getInput(void)
 {
-    std::vector<std::string> input = {par().q1, par().q2, par().sink, par().source};
+    std::vector<std::string> input = {par().q1, par().q2, par().sink};
     
     return input;
 }

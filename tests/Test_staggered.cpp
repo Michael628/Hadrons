@@ -127,7 +127,6 @@ int main(int argc, char *argv[])
     mesPar.q2     = "quark_0t";
     mesPar.gammas = "Gamma5"; // diagonal
     mesPar.sink   = "sink";
-    mesPar.source = "point_origin";
     mesName       = "2pt_point";
     application.createModule<MContraction::StagMeson>(mesName, mesPar);
 
