@@ -1,30 +1,30 @@
-/*
- * A2AMatrix.hpp, part of Hadrons (https://github.com/aportelli/Hadrons)
- *
- * Copyright (C) 2015 - 2020
- *
- * Author: Antonin Portelli <antonin.portelli@me.com>
- * Author: Fionn O hOgain <fionn.o.hogain@ed.ac.uk>
- * Author: Peter Boyle <paboyle@ph.ed.ac.uk>
- * Author: fionnoh <fionnoh@gmail.com>
- *
- * Hadrons is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * Hadrons is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Hadrons.  If not, see <http://www.gnu.org/licenses/>.
- *
- * See the full license in the file "LICENSE" in the top level distribution 
- * directory.
- */
+/*************************************************************************************
 
+Grid physics library, www.github.com/paboyle/Grid 
+
+Source file: Hadrons/A2AMatrix.hpp
+
+Copyright (C) 2015-2019
+
+Author: Antonin Portelli <antonin.portelli@me.com>
+Author: Peter Boyle <paboyle@ph.ed.ac.uk>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc.,
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+See the full license in the file "LICENSE" in the top level distribution directory
+*************************************************************************************/
 /*  END LEGAL */
 #ifndef A2A_Matrix_hpp_
 #define A2A_Matrix_hpp_
@@ -75,7 +75,7 @@ public:
     A2AKernel(void) = default;
     virtual ~A2AKernel(void) = default;
     virtual void operator()(A2AMatrixSet<T> &m, const Field *left, const Field *right,
-                          const unsigned int orthogDim, double &time) = 0;
+                            const unsigned int orthogDim, double &time) = 0;
     virtual double flops(const unsigned int blockSizei, const unsigned int blockSizej) = 0;
     virtual double bytes(const unsigned int blockSizei, const unsigned int blockSizej) = 0;
 };
@@ -108,7 +108,7 @@ public:
     void saveBlock(const A2AMatrixSet<T> &m, const unsigned int ext, const unsigned int str,
                    const unsigned int i, const unsigned int j);
     template <template <class> class Vec, typename VecT>
-    void load(Vec<VecT> &v, double *tRead = nullptr, GridBase *grid = nullptr);
+    void load(Vec<VecT> &v, double *tRead = nullptr);
 private:
     std::string  filename_{""}, dataname_{""};
     unsigned int nt_{0}, ni_{0}, nj_{0};
@@ -172,7 +172,7 @@ public:
         if ((MatLeft::Options  == RowMajor) and
             (MatRight::Options == ColMajor))
         {
-  	  thread_for(r,a.rows(),
+      thread_for(r,a.rows(),
             {
                 C tmp;
 #ifdef USE_MKL
@@ -187,7 +187,7 @@ public:
             });
         }
         else
-	  {
+      {
             thread_for(c,a.cols(),
             {
                 C tmp;
@@ -203,6 +203,49 @@ public:
             });
         }
     }
+    
+    
+    // accTrMul(acc, a, b, eval): acc += tr(a*b) / eval / eval
+    template <typename C, typename MatLeft, typename MatRight, typename Eval>
+    static inline void accTrMul(C &acc,
+                                const MatLeft &a,
+                                const MatRight &b,
+                                const Eval &eval)
+    {
+        int vsize = a.cols();
+        
+        thread_for(r,vsize,
+                   {
+                       Eigen::VectorXcd tmpv(vsize);
+                       Eigen::VectorXcd avec(vsize);
+                       Eigen::VectorXcd bvec(vsize);
+                       C tmp;
+                       ComplexD reval = eval(r);
+
+                       avec = a.row(r);
+                       bvec = b.col(r);
+                       tmpv = avec.cwiseProduct(bvec.cwiseProduct(eval));
+                       tmp  = ComplexD(tmpv.sum())*reval;
+                       
+                       tmpv = b.row(r).conjugate();
+                       bvec = tmpv.cwiseProduct(eval);
+                       tmpv = avec.cwiseProduct(bvec);
+                       tmp += ComplexD(tmpv.sum())*reval;
+
+                       avec = a.col(r).conjugate();
+                       tmpv = avec.cwiseProduct(bvec);
+                       tmp += ComplexD(tmpv.sum())*reval;
+
+                       bvec = b.col(r);
+                       tmpv = avec.cwiseProduct(bvec.cwiseProduct(eval));
+                       tmp += ComplexD(tmpv.sum())*reval;
+                       
+                       thread_critical
+                       {
+                           acc += tmp;
+                       }
+                   });
+    }
 
     template <typename MatLeft, typename MatRight>
     static inline double accTrMulFlops(const MatLeft &a, const MatRight &b)
@@ -210,6 +253,14 @@ public:
         double n = a.rows()*a.cols();
 
         return 8.*n;
+    }
+    
+    template <typename MatLeft, typename MatRight>
+    static inline double accTrMulCCFlops(const MatLeft &a, const MatRight &b)
+    {
+        double n = a.rows()*a.cols();
+        
+        return 36.*n;
     }
 
     // mul(res, a, b): res = a*b
@@ -506,53 +557,44 @@ void A2AMatrixIo<T>::saveBlock(const A2AMatrixSet<T> &m,
 
 template <typename T>
 template <template <class> class Vec, typename VecT>
-void A2AMatrixIo<T>::load(Vec<VecT> &v, double *tRead, GridBase *grid)
+void A2AMatrixIo<T>::load(Vec<VecT> &v, double *tRead)
 {
 #ifdef HAVE_HDF5
+    Hdf5Reader           reader(filename_);
     std::vector<hsize_t> hdim;
     H5NS::DataSet        dataset;
     H5NS::DataSpace      dataspace;
     H5NS::CompType       datatype;
-
-    if (!(grid) || grid->IsBoss())
+    
+    push(reader, dataname_);
+    auto &group = reader.getGroup();
+    dataset     = group.openDataSet(HADRONS_A2AM_NAME);
+    datatype    = dataset.getCompType();
+    dataspace   = dataset.getSpace();
+    hdim.resize(dataspace.getSimpleExtentNdims());
+    dataspace.getSimpleExtentDims(hdim.data());
+    if ((nt_*ni_*nj_ != 0) and
+        ((hdim[0] != nt_) or (hdim[1] != ni_) or (hdim[2] != nj_)))
     {
-        Hdf5Reader reader(filename_);
-        push(reader, dataname_);
-        auto &group = reader.getGroup();
-        dataset = group.openDataSet(HADRONS_A2AM_NAME);
-        datatype = dataset.getCompType();
-        dataspace = dataset.getSpace();
-        hdim.resize(dataspace.getSimpleExtentNdims());
-        dataspace.getSimpleExtentDims(hdim.data());
-        if ((nt_ * ni_ * nj_ != 0) and
-            ((hdim[0] != nt_) or (hdim[1] != ni_) or (hdim[2] != nj_)))
-        {
-            HADRONS_ERROR(Size, "all-to-all matrix size mismatch (got "
-                + std::to_string(hdim[0]) + "x" + std::to_string(hdim[1]) + "x"
-                + std::to_string(hdim[2]) + ", expected "
-                + std::to_string(nt_) + "x" + std::to_string(ni_) + "x"
-                + std::to_string(nj_));
-        }
-        else if (ni_*nj_ == 0)
-        {
-            if (hdim[0] != nt_)
-            {
-                HADRONS_ERROR(Size, "all-to-all time size mismatch (got "
-                    + std::to_string(hdim[0]) + ", expected "
-                    + std::to_string(nt_) + ")");
-            }
-            ni_ = hdim[1];
-            nj_ = hdim[2];
-        }
+        HADRONS_ERROR(Size, "all-to-all matrix size mismatch (got "
+            + std::to_string(hdim[0]) + "x" + std::to_string(hdim[1]) + "x"
+            + std::to_string(hdim[2]) + ", expected "
+            + std::to_string(nt_) + "x" + std::to_string(ni_) + "x"
+            + std::to_string(nj_));
     }
-    if (grid)
+    else if (ni_*nj_ == 0)
     {
-        grid->Broadcast(grid->BossRank(), &ni_, sizeof(unsigned int));
-        grid->Broadcast(grid->BossRank(), &nj_, sizeof(unsigned int));
+        if (hdim[0] != nt_)
+        {
+            HADRONS_ERROR(Size, "all-to-all time size mismatch (got "
+                + std::to_string(hdim[0]) + ", expected "
+                + std::to_string(nt_) + ")");
+        }
+        ni_ = hdim[1];
+        nj_ = hdim[2];
     }
 
     A2AMatrix<T>         buf(ni_, nj_);
-    int broadcastSize =  sizeof(T) * buf.size();
     std::vector<hsize_t> count    = {1, static_cast<hsize_t>(ni_),
                                      static_cast<hsize_t>(nj_)},
                          stride   = {1, 1, 1},
@@ -569,25 +611,15 @@ void A2AMatrixIo<T>::load(Vec<VecT> &v, double *tRead, GridBase *grid)
         unsigned int         t      = tp1 - 1;
         std::vector<hsize_t> offset = {static_cast<hsize_t>(t), 0, 0};
         
-        if (t % 10 == 0)
+        if (t % 1 == 0)
         {
             std::cout << " " << t;
             std::cout.flush();
         }
-        if (!(grid) || grid->IsBoss())
-        {
-            dataspace.selectHyperslab(H5S_SELECT_SET, count.data(), offset.data(),
-                                      stride.data(), block.data());
-        }
-        if (tRead) *tRead -= usecond();
-        if (!(grid) || grid->IsBoss())
-        {
-            dataset.read(buf.data(), datatype, memspace, dataspace);
-        }
-        if (grid)
-        {
-            grid->Broadcast(grid->BossRank(), buf.data(), broadcastSize);
-        }
+        dataspace.selectHyperslab(H5S_SELECT_SET, count.data(), offset.data(),
+                                  stride.data(), block.data());
+        if (tRead) *tRead -= usecond();    
+        dataset.read(buf.data(), datatype, memspace, dataspace);
         if (tRead) *tRead += usecond();
         v[t] = buf.template cast<VecT>();
     }

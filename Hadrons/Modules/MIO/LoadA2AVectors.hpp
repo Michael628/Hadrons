@@ -67,6 +67,8 @@ public:
 };
 
 MODULE_REGISTER_TMP(LoadA2AVectors, TLoadA2AVectors<FIMPL>, MIO);
+MODULE_REGISTER_TMP(StagLoadA2AVectors, TLoadA2AVectors<STAGIMPL>, MIO);
+
 
 /******************************************************************************
  *                      TLoadA2AVectors implementation                        *
@@ -85,6 +87,7 @@ std::vector<std::string> TLoadA2AVectors<FImpl>::getInput(void)
     
     return in;
 }
+
 
 template <typename FImpl>
 std::vector<std::string> TLoadA2AVectors<FImpl>::getOutput(void)
