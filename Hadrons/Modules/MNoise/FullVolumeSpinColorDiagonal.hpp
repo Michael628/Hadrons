@@ -101,8 +101,8 @@ std::vector<std::string> TFullVolumeSpinColorDiagonal<FImpl>::getOutput(void)
 template <typename FImpl>
 void TFullVolumeSpinColorDiagonal<FImpl>::setup(void)
 {
-    envCreateDerived(FullVolumeSpinColorDiagonalNoise<FImpl>, 
-                     DilutedNoise<FImpl>,
+    envCreateDerived(DilutedNoise<FImpl>,
+                     FullVolumeSpinColorDiagonalNoise<FImpl>, 
                      getName(), 1, envGetGrid(FermionField), par().nsrc);
 }
 
