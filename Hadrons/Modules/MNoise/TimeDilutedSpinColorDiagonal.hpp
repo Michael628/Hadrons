@@ -92,8 +92,8 @@ std::vector<std::string> TTimeDilutedSpinColorDiagonal<FImpl>::getOutput(void)
 template <typename FImpl>
 void TTimeDilutedSpinColorDiagonal<FImpl>::setup(void)
 {
-    envCreateDerived(SpinColorDiagonalNoise<FImpl>, 
-                     TimeDilutedNoise<FImpl>,
+    envCreateDerived(DilutedNoise<FImpl>,
+                     FullVolumeSpinColorDiagonalNoise<FImpl>, 
                      getName(), 1, envGetGrid(FermionField), 1);
 }
 
@@ -101,7 +101,7 @@ void TTimeDilutedSpinColorDiagonal<FImpl>::setup(void)
 template <typename FImpl>
 void TTimeDilutedSpinColorDiagonal<FImpl>::execute(void)
 {
-    auto &noise = envGet(SpinColorDiagonalNoise<FImpl>, getName());
+    auto &noise = envGet(FullVolumeSpinColorDiagonalNoise<FImpl>, getName());
 
     LOG(Message) << "Generating time-diluted, spin-color diagonal noise" << std::endl;
     noise.generateNoise(rng4d());
